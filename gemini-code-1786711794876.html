@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Teacher Portal</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #eef2f5; margin: 0; padding: 20px; }
+    .container { max-width: 650px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    h2 { text-align: center; color: #2c3e50; }
+    .tabs { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .tab-btn { background: #ecf0f1; color: #333; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1; text-align: center;}
+    .tab-btn.active { background: #3498db; color: white; }
+    
+    input, select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid #bdc3c7; box-sizing: border-box; font-size: 16px; }
+    .primary-btn { background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 20px;}
+    .primary-btn:hover { background: #2ecc71; }
+    .danger-btn { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; width: auto;}
+    
+    .student-row, .holiday-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; background: #fafafa; margin-top: 5px; border-radius: 5px;}
+    .switch { display: flex; gap: 15px; }
+    .present-lbl { color: #27ae60; font-weight: bold; }
+    .absent-lbl { color: #e74c3c; font-weight: bold; }
+    
+    .section { display: none; }
+    .active-section { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="container" id="loginScreen">
+  <h2>Teacher Login Portal</h2>
+  <label>Email or Mobile No:</label>
+  <input type="text" id="credential" placeholder="E.g., 9876543210">
+  <button class="primary-btn" onclick="login()">Access Dashboard</button>
+  <p id="loginMsg" style="color:#e74c3c; text-align:center; font-weight:bold;"></p>
+</div>
+
+<div class="container section" id="dashboard">
+  <h2 id="welcomeText">Dashboard</h2>
+  
+  <div class="tabs">
+    <button class="tab-btn active" id="tabMark" onclick="switchTab('markAttendance')">Attendance</button>
+    <button class="tab-btn" id="tabAdd" onclick="switchTab('addStudent')">Add Student</button>
+    <button class="tab-btn" id="tabHolidays" onclick="switchTab('manageHolidays')">Holidays</button>
+  </div>
+
+  <!-- ATTENDANCE SECTION -->
+  <div id="markAttendance" class="active-section">
+    <!-- Purana code same rahega yaha -->
+    <div style="display: flex; gap: 10px;">
+      <div style="flex: 1;">
+        <label>Select Date:</label>
+        <input type="date" id="attDate">
+      </div>
+      <div style="flex: 1;">
+        <label>Class:</label>
+        <select id="classSelect">
+          <option value="">-- Select --</option>
+          <option value="10A">Class 10A</option>
+          <option value="10B">Class 10B</option>
+        </select>
+      </div>
+    </div>
+    <button onclick="fetchStudents()" style="background:#34495e; color:white;">Fetch List</button>
+    <p id="updateNotice" style="color:#e67e22; font-weight:bold; text-align:center; display:none;">⚠ Edit Mode Active</p>
+    <div id="studentList" style="margin-top: 15px;"></div>
+    <button class="primary-btn" onclick="submitData()" style="display:none;" id="submitBtn">Save Attendance</button>
+  </div>
+
+  <!-- ADD STUDENT SECTION -->
+  <div id="addStudent" class="section">
+    <h3>Add Student</h3>
+    <input type="text" id="newRoll" placeholder="Roll Number (e.g., 101)">
+    <input type="text" id="newName" placeholder="Student Full Name">
+    <select id="newClass">
+      <option value="10A">Class 10A</option>
+      <option value="10B">Class 10B</option>
+    </select>
+    <input type="text" id="newPhone" placeholder="Parent WhatsApp Number">
+    <button class="primary-btn" onclick="saveNewStudent()">Add Student</button>
+  </div>
+
+  <!-- HOLIDAY MANAGEMENT SECTION -->
+  <div id="manageHolidays" class="section">
+    <h3>Manage Holidays</h3>
+    <div style="background:#fff3cd; padding:10px; border-radius:5px; margin-bottom:15px; font-size:14px; color:#856404;">
+      💡 Alert will automatically go to parents via WhatsApp 1 day before the holiday.
+    </div>
+    
+    <div style="display: flex; gap: 10px; align-items: flex-end;">
+      <div style="flex: 1;"><label>Holiday Date:</label><input type="date" id="holDate"></div>
+      <div style="flex: 2;"><label>Festival/Occasion:</label><input type="text" id="holName" placeholder="E.g., Diwali, Sunday"></div>
+    </div>
+    <button onclick="saveHoliday()" style="background:#2980b9; color:white; margin-top:10px;">➕ Add Holiday</button>
+    
+    <hr style="margin: 20px 0;">
+    <h4>Upcoming Holidays:</h4>
+    <div id="holidayList">Loading...</div>
+  </div>
+</div>
+
+<script>
+  let currentStudents = [];
+  document.getElementById('attDate').valueAsDate = new Date();
+
+  function login() {
+    var cred = document.getElementById('credential').value;
+    google.script.run.withSuccessHandler(function(res) {
+      if(res.success) {
+        document.getElementById('loginScreen').style.display = "none";
+        document.getElementById('dashboard').style.display = "block";
+        document.getElementById('welcomeText').innerText = "Welcome, " + res.teacherName;
+        loadHolidays(); // Load holidays when dashboard opens
+      } else { alert("Invalid Credentials!"); }
+    }).verifyLogin(cred);
+  }
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active-section'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active-section');
+    event.target.classList.add('active');
+  }
+
+  /* --- Attendance Functions (Same as before) --- */
+  function fetchStudents() {
+    var cls = document.getElementById('classSelect').value;
+    var date = document.getElementById('attDate').value;
+    if(!cls || !date) return;
+    document.getElementById('studentList').innerHTML = "Loading...";
+    google.script.run.withSuccessHandler(function(data) {
+      currentStudents = data.students;
+      var html = "";
+      document.getElementById('updateNotice').style.display = data.isUpdate ? "block" : "none";
+      currentStudents.forEach((s, index) => {
+        let pChecked = s.status === "Present" ? "checked" : "";
+        let aChecked = s.status === "Absent" ? "checked" : "";
+        html += `<div class="student-row">
+                  <div><strong>${s.rollNo}</strong> - ${s.name}</div>
+                  <div class="switch">
+                    <label><input type="radio" name="status_${index}" value="Present" ${pChecked}> <span class="present-lbl">P</span></label>
+                    <label><input type="radio" name="status_${index}" value="Absent" ${aChecked}> <span class="absent-lbl">A</span></label>
+                  </div></div>`;
+      });
+      document.getElementById('studentList').innerHTML = html;
+      document.getElementById('submitBtn').style.display = "block";
+    }).getAttendanceData(cls, date);
+  }
+
+  function submitData() {
+    var btn = document.getElementById('submitBtn'); btn.innerText = "Saving..."; btn.disabled = true;
+    var attendanceData = [];
+    currentStudents.forEach((s, index) => {
+      attendanceData.push({ rollNo: s.rollNo, name: s.name, phone: s.phone, status: document.querySelector(`input[name="status_${index}"]:checked`).value });
+    });
+    var cls = document.getElementById('classSelect').value, date = document.getElementById('attDate').value;
+    google.script.run.withSuccessHandler(function(msg) { alert(msg); btn.innerText = "Save Attendance"; btn.disabled = false; }).saveOrUpdateAttendance(attendanceData, cls, date);
+  }
+
+  function saveNewStudent() {
+    var roll = document.getElementById('newRoll').value, name = document.getElementById('newName').value, cls = document.getElementById('newClass').value, phone = document.getElementById('newPhone').value;
+    if(!roll || !name || !phone) return alert("Fill all details");
+    google.script.run.withSuccessHandler(function(msg) { alert(msg); document.getElementById('newRoll').value = ""; document.getElementById('newName').value = ""; document.getElementById('newPhone').value = ""; }).addNewStudent(roll, name, cls, phone);
+  }
+
+  /* --- Holiday Functions --- */
+  function loadHolidays() {
+    google.script.run.withSuccessHandler(function(holidays) {
+      var html = "";
+      if(holidays.length === 0) html = "<p>No holidays added yet.</p>";
+      holidays.forEach(h => {
+        html += `<div class="holiday-row">
+                  <div><strong>${h.date}</strong> - ${h.name}</div>
+                  <button class="danger-btn" onclick="removeHoliday('${h.date}')">Delete</button>
+                 </div>`;
+      });
+      document.getElementById('holidayList').innerHTML = html;
+    }).getHolidays();
+  }
+
+  function saveHoliday() {
+    var date = document.getElementById('holDate').value;
+    var name = document.getElementById('holName').value;
+    if(!date || !name) return alert("Please enter Date and Holiday Name!");
+    
+    google.script.run.withSuccessHandler(function(msg) {
+      alert(msg);
+      document.getElementById('holName').value = "";
+      loadHolidays(); // Refresh list
+    }).addHoliday(date, name);
+  }
+
+  function removeHoliday(date) {
+    if(!confirm("Are you sure you want to delete this holiday?")) return;
+    google.script.run.withSuccessHandler(function(msg) {
+      alert(msg);
+      loadHolidays(); // Refresh list
+    }).deleteHoliday(date);
+  }
+</script>
+
+</body>
+</html>
